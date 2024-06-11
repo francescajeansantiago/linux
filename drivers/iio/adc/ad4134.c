@@ -55,9 +55,11 @@
 #define AD4134_ODR_MAX				1496000
 #define AD4134_ODR_DEFAULT			1496000
 
-#define AD4134_NUM_CHANNELS			8
+#define AD4134_NUM_CHANNELS			4
+#define AD4134_DUO_NUM_CHANNELS			8
 
-#define AD4134_CHANNEL_MASK			0xFF
+#define AD4134_CHANNEL_MASK			0x0F
+#define AD4134_DUO_CHANNEL_MASK			0xFF
 
 #define AD4134_RESET_TIME_US			10000000
 
@@ -627,9 +629,6 @@ static int ad7134_adc_channel_init(struct iio_dev *indio_dev)
 	struct iio_chan_spec *chan_array;
 	int bit, idx = 0;
 
-	st->channels_mask = AD4134_CHANNEL_MASK;
-	st->num_channels = AD4134_NUM_CHANNELS;
-
 	indio_dev->num_channels = bitmap_weight(&st->channels_mask,
 						st->num_channels) + 1;
 
@@ -781,6 +780,15 @@ static int ad4134_probe(struct spi_device *spi)
 	if (IS_ERR(st->regmap))
 		return PTR_ERR(st->regmap);
 
+	if (ad4134_get_ADC_count(st) == 2) {
+		st->channels_mask = AD4134_DUO_CHANNEL_MASK;
+		st->num_channels = AD4134_DUO_NUM_CHANNELS;
+		indio_dev->num_channels = AD4134_DUO_NUM_CHANNELS;
+	} else {
+		st->channels_mask = AD4134_CHANNEL_MASK;
+		st->num_channels = AD4134_NUM_CHANNELS;
+		indio_dev->num_channels = AD4134_NUM_CHANNELS;
+	}
 	dev_info(&spi->dev, "ad4134_probe_before_channel_init");
 	ret = ad7134_adc_channel_init(indio_dev);
 	if (ret < 0) {
@@ -788,7 +796,6 @@ static int ad4134_probe(struct spi_device *spi)
 		goto error_disable_adc_clk;
 	}
 
-	indio_dev->num_channels = AD4134_NUM_CHANNELS;
 	indio_dev->name = spi->dev.of_node->name;
 	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_HARDWARE;
 	indio_dev->setup_ops = &ad4134_buffer_ops;
