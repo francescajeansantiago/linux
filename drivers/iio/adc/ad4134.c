@@ -630,10 +630,10 @@ static int ad7134_adc_channel_init(struct iio_dev *indio_dev)
 	int bit, idx = 0;
 
 	indio_dev->num_channels = bitmap_weight(&st->channels_mask,
-						st->num_channels) + 1;
+						st->num_channels);
 
 	chan_array = devm_kzalloc(&indio_dev->dev,
-				  ((indio_dev->num_channels + 1) *
+				  ((indio_dev->num_channels) *
 					sizeof(struct iio_chan_spec)),
 				  GFP_KERNEL);
 
