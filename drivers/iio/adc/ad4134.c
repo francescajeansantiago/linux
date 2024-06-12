@@ -789,13 +789,6 @@ static int ad4134_probe(struct spi_device *spi)
 		st->num_channels = AD4134_NUM_CHANNELS;
 		indio_dev->num_channels = AD4134_NUM_CHANNELS;
 	}
-	dev_info(&spi->dev, "ad4134_probe_before_channel_init");
-	ret = ad7134_adc_channel_init(indio_dev);
-	if (ret < 0) {
-		dev_err(&spi->dev, "Couldn't initialize the channels.\n");
-		goto error_disable_adc_clk;
-	}
-
 	indio_dev->name = spi->dev.of_node->name;
 	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_HARDWARE;
 	indio_dev->setup_ops = &ad4134_buffer_ops;
@@ -817,6 +810,13 @@ static int ad4134_probe(struct spi_device *spi)
 		indio_dev->modes = 0;
 		indio_dev->setup_ops = 0;
 		return devm_iio_device_register(dev, indio_dev);
+	}
+
+	dev_info(&spi->dev, "ad4134_probe_before_channel_init");
+	ret = ad7134_adc_channel_init(indio_dev);
+	if (ret < 0) {
+		dev_err(&spi->dev, "Couldn't initialize the channels.\n");
+		goto error_disable_adc_clk;
 	}
 
 	st->spi_engine_fwnode = fwnode_find_reference(fwnode, "adi,spi-engine", 0);
