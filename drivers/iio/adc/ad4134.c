@@ -493,6 +493,53 @@ static void ad4134_disable_pwm(void *data)
 	pwm_disable(data);
 }
 
+static int ad4134_pwm_setup(struct ad4134_state *st)
+{
+	struct device *dev = &st->spi->dev;
+	int ret;
+
+	if (!device_property_present(&st->spi->dev, "pwms"))
+		return 0;
+
+	st->odr_pwm = devm_pwm_get(dev, "odr_pwm");
+	if (IS_ERR(st->odr_pwm))
+		dev_err(&st->spi->dev, "Failed to find ODR PWM\n");
+
+	ret = devm_add_action_or_reset(dev, ad4134_disable_pwm, st->odr_pwm);
+	if (ret)
+		return dev_err_probe(dev, ret,
+					"Failed to add ODR PWM disable action\n");
+
+	st->trigger_pwm = devm_pwm_get(dev, "trigger_pwm");
+	if (IS_ERR(st->trigger_pwm))
+		dev_err(&st->spi->dev, "Failed to find trigger PWM\n");
+
+	ret = devm_add_action_or_reset(dev, ad4134_disable_pwm, st->trigger_pwm);
+	if (ret)
+		return dev_err_probe(dev, ret,
+					"Failed to add ODR PWM disable action\n");
+
+	fsleep(3000);
+	if (!IS_ERR(st->odr_pwm) & !IS_ERR(st->trigger_pwm)) {
+		ret = _ad4134_set_odr(st, AD4134_ODR_DEFAULT);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to initialize ODR\n");
+
+		ret = pwm_enable(st->odr_pwm);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to enable ODR PWM\n");
+
+		ret = pwm_enable(st->trigger_pwm);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					"Failed to enable trigger PWM\n");
+	} else {
+		dev_warn(dev, "Failed to find ODR PWM\n");
+	}
+
+	return 0;
+}
+
 static int ad4134_setup(struct ad4134_state *st)
 {
 	struct device *dev = &st->spi->dev;
@@ -553,41 +600,10 @@ static int ad4134_setup(struct ad4134_state *st)
 	fsleep(AD4134_RESET_TIME_US);
 
 	gpiod_set_value_cansleep(reset_gpio, 0);
-	st->odr_pwm = devm_pwm_get(dev, "odr_pwm");
-	if (IS_ERR(st->odr_pwm))
-		dev_err(&st->spi->dev, "Failed to find ODR PWM\n");
 
-	ret = devm_add_action_or_reset(dev, ad4134_disable_pwm, st->odr_pwm);
+	ret = ad4134_pwm_setup(st);
 	if (ret)
-		return dev_err_probe(dev, ret,
-					"Failed to add ODR PWM disable action\n");
-
-	st->trigger_pwm = devm_pwm_get(dev, "trigger_pwm");
-	if (IS_ERR(st->trigger_pwm))
-		dev_err(&st->spi->dev, "Failed to find trigger PWM\n");
-
-	ret = devm_add_action_or_reset(dev, ad4134_disable_pwm, st->trigger_pwm);
-	if (ret)
-		return dev_err_probe(dev, ret,
-					"Failed to add ODR PWM disable action\n");
-
-	fsleep(3000);
-	if (!IS_ERR(st->odr_pwm) & !IS_ERR(st->trigger_pwm)) {
-		ret = _ad4134_set_odr(st, AD4134_ODR_DEFAULT);
-		if (ret)
-			return dev_err_probe(dev, ret, "Failed to initialize ODR\n");
-
-		ret = pwm_enable(st->odr_pwm);
-		if (ret)
-			return dev_err_probe(dev, ret, "Failed to enable ODR PWM\n");
-
-		ret = pwm_enable(st->trigger_pwm);
-		if (ret)
-			return dev_err_probe(dev, ret,
-					"Failed to enable trigger PWM\n");
-	} else {
-		dev_warn(dev, "Failed to find ODR PWM\n");
-	}
+		return ret;
 
 	ret = regmap_update_bits(st->regmap, AD4134_DATA_PACKET_CONFIG_REG,
 				 AD4134_DATA_PACKET_CONFIG_FRAME_MASK,
