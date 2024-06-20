@@ -1132,6 +1132,7 @@ L:	linux-iio@vger.kernel.org
 W:	http://ez.analog.com/community/linux-device-drivers
 S:	Supported
 F:	Documentation/devicetree/bindings/iio/adc/adi,ad4692.yaml
+F:	drivers/iio/adc/ad4692.c
 
 AMD SENSOR FUSION HUB DRIVER
 M:	Basavaraj Natikar <basavaraj.natikar@amd.com>
