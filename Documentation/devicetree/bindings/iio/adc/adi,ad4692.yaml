@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/accel/adi,ad4692.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices AD4692 MuxSAR Analog-to-Digital Converter
+
+maintainers:
+  - Radu Sabau  <radu.sabau@analog.com>
+
+description: |
+  Wait for datasheet.
+
+  Wait for product link.
+
+properties:
+  compatible:
+    enum:
+      - adi,ad4691
+      - adi,ad4692
+      - adi,ad4693
+      - adi,ad4694
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  more to this
