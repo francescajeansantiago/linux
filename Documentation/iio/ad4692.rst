@@ -1,0 +1,11 @@
+.. SPDX-License-Identifier: GPL-2.0
+===============
+AD4692 driver
+===============
+
+This driver supports Analog Device's AD4692, AD4691, AD4694 and AD4693 on
+SPI bus.
+
+1. Supported devices
+====================
+Wait for datasheet description

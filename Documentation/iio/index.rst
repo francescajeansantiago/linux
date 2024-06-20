@@ -17,5 +17,6 @@ Industrial I/O Kernel Drivers
    :maxdepth: 1
 
    adis16475
+   ad4692
    bno055
    ep93xx_adc
