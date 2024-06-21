@@ -556,84 +556,103 @@ static const struct iio_enum axi_crc_control_enum = {
 	.get = axi_crc_control_get,
 };
 
-static int ad485x_set_offset(struct ad485x_dev *adc, int addr, int val)
+static int ad485x_set_calibbias(struct ad485x_dev *adc,
+	int ch, int val, int val2)
 {
+	unsigned int reg_val;
 	int ret;
 
-	ret = ad485x_spi_reg_write(adc, AD485x_REG_CHX_OFFSET_LSB(addr),
-				   (val << 3) & 0xFF);
+	reg_val = val;
+
+	ret = ad485x_spi_reg_write(adc, AD485x_REG_CHX_OFFSET_LSB(ch),
+				   (reg_val << 4) & 0xFF);
 	if (ret < 0)
 		return ret;
 
-	ret = ad485x_spi_reg_write(adc, AD485x_REG_CHX_OFFSET_MID(addr),
-				   (val >> 5) & 0xFF);
+	ret = ad485x_spi_reg_write(adc, AD485x_REG_CHX_OFFSET_MID(ch),
+				   (reg_val >> 4) & 0xFF);
 	if (ret < 0)
 		return ret;
 
-	return ad485x_spi_reg_write(adc, AD485x_REG_CHX_OFFSET_MSB(addr),
-				    (val >> 13) & 0xFF);
+	return ad485x_spi_reg_write(adc, AD485x_REG_CHX_OFFSET_MSB(ch),
+				    (reg_val >> 12) & 0xFF);
 }
 
-static int ad485x_get_offset(struct ad485x_dev *adc, int addr, int *val)
+static int ad485x_get_calibbias(struct ad485x_dev *adc,
+	int ch, int *val, int *val2)
 {
-	unsigned int readval;
+	unsigned int reg_val;
 	int ret;
 
-	ret = ad485x_spi_reg_read(adc, AD485x_REG_CHX_OFFSET_MSB(addr),
-				  &readval);
+	ret = ad485x_spi_reg_read(adc, AD485x_REG_CHX_OFFSET_MSB(ch),
+				  &reg_val);
 	if (ret < 0)
 		return ret;
 
-	*val = readval << 16;
-	ret = ad485x_spi_reg_read(adc, AD485x_REG_CHX_OFFSET_MID(addr),
-				  &readval);
+	*val = reg_val << 12;
+	ret = ad485x_spi_reg_read(adc, AD485x_REG_CHX_OFFSET_MID(ch),
+				  &reg_val);
 	if (ret < 0)
 		return ret;
 
-	*val |= readval << 8;
-	ret = ad485x_spi_reg_read(adc, AD485x_REG_CHX_OFFSET_LSB(addr),
-				  &readval);
+	*val |= reg_val << 4;
+	ret = ad485x_spi_reg_read(adc, AD485x_REG_CHX_OFFSET_LSB(ch),
+				  &reg_val);
 	if (ret < 0)
 		return ret;
 
-	*val |= readval;
-	*val = *val >> 3;
+	if (*val & 0x80000)
+		*val |= ~((1 << 20) - 1);
 
-	return 0;
+	return IIO_VAL_INT;
 }
 
-static int ad485x_set_gain(struct ad485x_dev *adc, int addr, int val)
+static int ad485x_set_calibscale(struct ad485x_dev *adc,
+	int ch, int val, int val2)
 {
+	unsigned long long gain;
+	unsigned int reg_val;
 	int ret;
 
-	ret = ad485x_spi_reg_write(adc, AD485x_REG_CHX_GAIN_MSB(addr),
-				   val >> 8);
+	gain = (val * 1000000 + val2);
+	gain = gain * 32768;
+	do_div(gain, 1000000);
+
+	reg_val = gain;
+
+	ret = ad485x_spi_reg_write(adc, AD485x_REG_CHX_GAIN_MSB(ch),
+				   reg_val >> 8);
 	if (ret < 0)
 		return ret;
 
-	return ad485x_spi_reg_write(adc, AD485x_REG_CHX_GAIN_LSB(addr),
-				    val & 0xFF);
+	return ad485x_spi_reg_write(adc, AD485x_REG_CHX_GAIN_LSB(ch),
+				    reg_val & 0xFF);
 }
 
-static int ad485x_get_gain(struct ad485x_dev *adc, int addr, int *val)
+static int ad485x_get_calibscale(struct ad485x_dev *adc,
+	int ch, int *val, int *val2)
 {
-	int readval;
+	unsigned int reg_val;
+	int gain;
 	int ret;
 
 	ret = ad485x_spi_reg_read(adc,
-		AD485x_REG_CHX_GAIN_MSB(addr), &readval);
+		AD485x_REG_CHX_GAIN_MSB(ch), &reg_val);
 	if (ret < 0)
 		return ret;
 
-	*val = readval << 8;
+	gain = (reg_val & 0xFF) << 8;
 	ret = ad485x_spi_reg_read(adc,
-		AD485x_REG_CHX_GAIN_LSB(addr), &readval);
+		AD485x_REG_CHX_GAIN_LSB(ch), &reg_val);
 	if (ret < 0)
 		return ret;
 
-	*val |= readval & 0xFF;
+	gain |= reg_val & 0xFF;
 
-	return 0;
+	*val = gain;
+	*val2 = 32768;
+
+	return IIO_VAL_FRACTIONAL;
 }
 
 static int ad485x_set_phase(struct ad485x_dev *adc, int addr, int val)
@@ -879,8 +898,7 @@ static int ad485x_read_raw(struct iio_dev *indio_dev,
 		*val = adc->sampling_freq;
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_CALIBSCALE:
-		ad485x_get_gain(adc, chan->channel, val);
-		return IIO_VAL_INT;
+		return ad485x_get_calibscale(adc, chan->channel, val, val2);
 	case IIO_CHAN_INFO_SCALE:
 		ret = ad485x_spi_reg_read(adc,
 			AD485x_REG_CHX_SOFTSPAN(chan->channel), &softspan);
@@ -890,8 +908,7 @@ static int ad485x_read_raw(struct iio_dev *indio_dev,
 		*val2 = (1 << chan->scan_type.realbits) * 1000;
 		return IIO_VAL_FRACTIONAL;
 	case IIO_CHAN_INFO_CALIBBIAS:
-		ad485x_get_offset(adc, chan->channel, val);
-		return IIO_VAL_INT;
+		return ad485x_get_calibbias(adc, chan->channel, val, val2);
 	case IIO_CHAN_INFO_CALIBPHASE:
 		ad485x_get_phase(adc, chan->channel, val);
 		return IIO_VAL_INT;
@@ -911,9 +928,9 @@ static int ad485x_write_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		return ad485x_set_sampling_freq(adc, val);
 	case IIO_CHAN_INFO_CALIBSCALE:
-		return ad485x_set_gain(adc, chan->channel, val);
+		return ad485x_set_calibscale(adc, chan->channel, val, val2);
 	case IIO_CHAN_INFO_CALIBBIAS:
-		return ad485x_set_offset(adc, chan->channel, val);
+		return ad485x_set_calibbias(adc, chan->channel, val, val2);
 	case IIO_CHAN_INFO_CALIBPHASE:
 		return ad485x_set_phase(adc, chan->channel, val);
 	default:
