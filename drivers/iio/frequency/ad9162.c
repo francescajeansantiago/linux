@@ -54,6 +54,15 @@ enum ad916x_variant {
 
 enum {
 	AD916x_NCO_FREQ,
+
+	// FFH Feature
+	/* -------------- */
+	AD916x_NCO_1_FREQ,
+	AD916x_NCO_2_FREQ,
+	AD916x_NCO_3_FREQ,
+	AD916x_NCO_SEL,
+	/* -------------- */
+
 	AD916x_SAMPLING_FREQUENCY,
 	AD916x_TEMP_CALIB,
 	AD916x_FIR85_ENABLE,
@@ -802,11 +811,21 @@ static IIO_DEVICE_ATTR(out_voltage_fir85_enable,
 		       ad9162_attr_store,
 		       1);
 
+// FFH FEATURE
+/* ----------------------------- */
+// static IIO_DEVICE_ATTR(nco_mode_select,
+// 		       0644,
+// 		       ad9162_attr_show,
+// 		       ad9162_attr_store,
+// 		       2);
+
 static struct attribute *ad9162_attributes[] = {
 	&iio_dev_attr_out_altvoltage4_frequency_nco.dev_attr.attr,
 	&iio_dev_attr_out_voltage_fir85_enable.dev_attr.attr,
+	// &iio_dev_attr_nco_mode_select.dev_attr.attr, // additional
 	NULL,
 };
+/* ----------------------------- */
 
 static const struct attribute_group ad9162_attribute_group = {
 	.attrs = ad9162_attributes,
@@ -826,6 +845,7 @@ static ssize_t ad916x_write_ext(struct iio_dev *indio_dev,
 	/* en just because we have to pass it to ad916x_dc_test_get_mod */
 	int ret, en;
 	bool fir85_en;
+	u64 nco_mode_select;
 
 	mutex_lock(&st->lock);
 	switch ((u32)private) {
@@ -844,6 +864,82 @@ static ssize_t ad916x_write_ext(struct iio_dev *indio_dev,
 		ret = ad916x_nco_set(&st->dac_h, 0, freq_hz, test_word,
 				     st->dc_test_mode);
 		break;
+	
+	// FFH Feature
+	/* --------------------------------------- */
+	case AD916x_NCO_1_FREQ:
+		ret = kstrtoll(buf, 10, &freq_hz);
+		if (ret)
+			break;
+
+		/* just use the current test word */
+		ret = ad916x_dc_test_get_mode(&st->dac_h, &test_word, &en);
+		if (ret) {
+			dev_warn(&conv->spi->dev, "Using max amplitude...\n");
+			test_word = AD916X_TEST_WORD_MAX;
+		}
+
+		ret = ad916x_nco_set(&st->dac_h, 1, freq_hz, test_word,
+				     st->dc_test_mode);
+		if (ret) {
+			return ret;
+		}
+		break;
+
+	case AD916x_NCO_2_FREQ:
+		ret = kstrtoll(buf, 10, &freq_hz);
+		if (ret)
+			break;
+
+		/* just use the current test word */
+		ret = ad916x_dc_test_get_mode(&st->dac_h, &test_word, &en);
+		if (ret) {
+			dev_warn(&conv->spi->dev, "Using max amplitude...\n");
+			test_word = AD916X_TEST_WORD_MAX;
+		}
+
+		ret = ad916x_nco_set(&st->dac_h, 2, freq_hz, test_word,
+				     st->dc_test_mode);
+		if (ret) {
+			return ret;
+		}
+		break;
+
+	case AD916x_NCO_3_FREQ:
+		ret = kstrtoll(buf, 10, &freq_hz);
+		if (ret)
+			break;
+
+		/* just use the current test word */
+		ret = ad916x_dc_test_get_mode(&st->dac_h, &test_word, &en);
+		if (ret) {
+			dev_warn(&conv->spi->dev, "Using max amplitude...\n");
+			test_word = AD916X_TEST_WORD_MAX;
+		}
+
+		ret = ad916x_nco_set(&st->dac_h, 3, freq_hz, test_word,
+				     st->dc_test_mode);
+		if (ret) {
+			return ret;
+		}
+		break;
+
+	case AD916x_NCO_SEL:
+		
+		// baguhin
+		
+		ret = kstrtoll(buf, 10, &nco_mode_select);
+		if (ret)
+			break;
+
+		ret = ad916x_nco_select(&st->dac_h, nco_mode_select);
+		if (ret) {
+			return ret;
+		}
+
+		break;
+	/* --------------------------------------- */
+	
 	case AD916x_SAMPLING_FREQUENCY:
 		ret = kstrtoull(buf, 10, &samp_freq_hz);
 		if (ret)
@@ -892,6 +988,7 @@ static ssize_t ad916x_read_ext(struct iio_dev *indio_dev,
 	u16 test_word;
 	int fir85_en;
 	int ret, dc_test_en;
+	u8 nco_nr;
 
 	mutex_lock(&st->lock);
 	switch ((u32)private) {
@@ -901,6 +998,41 @@ static ssize_t ad916x_read_ext(struct iio_dev *indio_dev,
 		if (!ret)
 			ret = sprintf(buf, "%lld\n", freq);
 		break;
+
+	// FFH Feature
+	/* -------------------------------------------------------------- */
+	case AD916x_NCO_1_FREQ:
+		ret = ad916x_nco_get(&st->dac_h, 1, &freq, &test_word,
+				     &dc_test_en);
+		if (!ret)
+			ret = sprintf(buf, "%lld\n", freq);
+		break;
+
+	case AD916x_NCO_2_FREQ:
+		ret = ad916x_nco_get(&st->dac_h, 2, &freq, &test_word,
+				     &dc_test_en);
+		if (!ret)
+			ret = sprintf(buf, "%lld\n", freq);
+		break;
+
+	case AD916x_NCO_3_FREQ:
+		ret = ad916x_nco_get(&st->dac_h, 3, &freq, &test_word,
+				     &dc_test_en);
+		if (!ret)
+			ret = sprintf(buf, "%lld\n", freq);
+		break;
+	
+	case AD916x_NCO_SEL:
+		
+		// baguhin
+		ret = ad916x_register_read(&st->dac_h, AD916x_REG_HOPF_CTRL, &nco_nr);
+		if (!ret) {
+			nco_nr &= 31u;
+			ret = sprintf(buf, "%lld\n", nco_nr);
+		}
+		break;
+	/* -------------------------------------------------------------- */
+
 	case AD916x_SAMPLING_FREQUENCY:
 		ret = sprintf(buf, "%llu\n", ad9162_get_data_clk(conv));
 		break;
@@ -940,6 +1072,16 @@ static int ad9162_reg_access(struct iio_dev *indio_dev, unsigned int reg,
 
 static const struct iio_chan_spec_ext_info ad916x_ext_info[] = {
 	_AD916x_CHAN_EXT_INFO("nco_frequency", AD916x_NCO_FREQ, IIO_SEPARATE),
+
+	// FFH Feature
+	/* ------------------------------------------------------------------- */
+	_AD916x_CHAN_EXT_INFO("nco_frequency_1", AD916x_NCO_1_FREQ, IIO_SEPARATE),
+	_AD916x_CHAN_EXT_INFO("nco_frequency_2", AD916x_NCO_2_FREQ, IIO_SEPARATE),
+	_AD916x_CHAN_EXT_INFO("nco_frequency_3", AD916x_NCO_3_FREQ, IIO_SEPARATE),
+
+	_AD916x_CHAN_EXT_INFO("nco_select", AD916x_NCO_SEL, IIO_SEPARATE),
+	/* ------------------------------------------------------------------- */
+
 	_AD916x_CHAN_EXT_INFO("sampling_frequency", AD916x_SAMPLING_FREQUENCY,
 			      IIO_SHARED_BY_ALL),
 	_AD916x_CHAN_EXT_INFO("fir85_enable", AD916x_FIR85_ENABLE,
